@@ -30,11 +30,27 @@
     <div class="card"><h3>System</h3><div class="val ok" id="health">—</div></div>
   </div>
   <script>
+    function getToken() {
+      let t = localStorage.getItem('admin_token');
+      if (!t) {
+        t = prompt('Введите ADMIN_TOKEN');
+        if (t) localStorage.setItem('admin_token', t.trim());
+      }
+      return t ? t.trim() : '';
+    }
+    async function api(path) {
+      const r = await fetch(path, { headers: { 'X-Admin-Token': getToken() } });
+      if (r.status === 401 || r.status === 503) {
+        localStorage.removeItem('admin_token');
+        throw new Error('auth');
+      }
+      return r.json();
+    }
     async function load() {
       try {
         const [p, r, h] = await Promise.all([
-          fetch('/api/portfolio').then(x=>x.json()).catch(()=>({})),
-          fetch('/api/risk').then(x=>x.json()).catch(()=>({})),
+          api('/api/portfolio').catch(e => { if (e.message === 'auth') throw e; return {}; }),
+          api('/api/risk').catch(e => { if (e.message === 'auth') throw e; return {}; }),
           fetch('/api/health').then(x=>x.json()).catch(()=>({}))
         ]);
         if (p.total_equity !== undefined) {
@@ -49,7 +65,12 @@
           document.getElementById('risk').className = 'val ' + (r.kill_switch_engaged ? 'bad' : 'ok');
         }
         document.getElementById('health').textContent = h.status || '—';
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        if (e.message === 'auth') {
+          document.getElementById('health').textContent = 'Неверный токен — обновите страницу';
+          document.getElementById('health').className = 'val bad';
+        } else { console.error(e); }
+      }
     }
     load(); setInterval(load, 15000);
   </script>
