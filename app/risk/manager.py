@@ -9,6 +9,7 @@ from app.models.position import Position
 from app.models.trade import Trade
 from app.risk.kill_switch import KillSwitch
 from app.risk.limits import load_limits
+from app.risk.overrides import get_kill, load_limits_db
 
 logger = get_logger(__name__)
 
@@ -27,6 +28,14 @@ class RiskManager:
 
     async def check_trade(self, db: AsyncSession, market_id: str, token_id: str, intended_size_usd: float, entry_price: float, is_full_loss: bool) -> RiskDecision:
         checks: list[str] = []
+        db_kill = None
+        try:
+            self.limits = await load_limits_db(db)
+            db_kill = await get_kill(db)
+        except Exception:
+            logger.exception("Could not load risk overrides; using environment limits")
+        if db_kill and db_kill.get("engaged"):
+            return RiskDecision(False, f"Kill switch engaged: {db_kill.get('reason', '')}", 0.0, checks)
         if self.kill_switch.engaged:
             return RiskDecision(False, f"Kill switch engaged: {self.kill_switch.reason}", 0.0, checks)
         checks.append("kill_switch:ok")
@@ -54,6 +63,9 @@ class RiskManager:
             return RiskDecision(False, f"Daily stop loss reached ({daily_pnl:.2f})", 0.0, checks)
         if weekly_pnl <= -self.limits.weekly_stop_loss:
             return RiskDecision(False, f"Weekly stop loss reached ({weekly_pnl:.2f})", 0.0, checks)
+        total_pnl = await self._all_time_pnl(db)
+        if total_pnl <= -self.limits.max_drawdown:
+            return RiskDecision(False, f"Max drawdown reached (total realized {total_pnl:.2f})", 0.0, checks)
         checks.append(f"daily_pnl:{daily_pnl:.2f}")
         checks.append(f"weekly_pnl:{weekly_pnl:.2f}")
         return RiskDecision(True, "All risk checks passed", size, checks)
@@ -68,6 +80,10 @@ class RiskManager:
 
     async def _correlated_exposure(self, db: AsyncSession, market_id: str) -> float:
         return await self._market_exposure(db, market_id)
+
+    async def _all_time_pnl(self, db: AsyncSession) -> float:
+        result = await db.execute(select(func.coalesce(func.sum(Trade.realized_pnl), 0.0)))
+        return float(result.scalar() or 0.0)
 
     async def _daily_realized_pnl(self, db: AsyncSession) -> float:
         start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
