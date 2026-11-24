@@ -9,6 +9,14 @@ class FillResult:
     slippage: float
     partial: bool
 
+@dataclass
+class SellResult:
+    sold_size: float
+    avg_price: float
+    fee: float
+    proceeds: float
+    partial: bool
+
 class PaperSimulator:
     def __init__(self, slippage_bps: float = 50.0, fee_bps: float = 0.0) -> None:
         self.slippage_bps = slippage_bps
@@ -40,3 +48,25 @@ class PaperSimulator:
         fee = cost * (self.fee_bps / 10_000.0)
         partial = remaining_usd > 1e-6
         return FillResult(filled_size=round(filled_size, 8), avg_price=round(avg_price_with_slippage, 8), fee=round(fee, 8), slippage=round(slippage, 8), partial=partial)
+
+    def simulate_sell(self, bids: list[list[float]], size: float) -> SellResult:
+        """bids must be sorted best (highest) price first."""
+        if not bids:
+            raise InsufficientLiquidity("No bids available")
+        remaining = size
+        sold = 0.0
+        revenue = 0.0
+        for price, qty in bids:
+            price = float(price); qty = float(qty)
+            take = min(remaining, qty)
+            revenue += take * price
+            sold += take
+            remaining -= take
+            if remaining <= 1e-9:
+                break
+        if sold <= 0:
+            raise InsufficientLiquidity("Order book could not absorb any size")
+        avg = (revenue / sold) * (1.0 - self.slippage_bps / 10_000.0)
+        gross = avg * sold
+        fee = gross * (self.fee_bps / 10_000.0)
+        return SellResult(sold_size=round(sold, 8), avg_price=round(avg, 8), fee=round(fee, 8), proceeds=round(gross - fee, 8), partial=remaining > 1e-6)
