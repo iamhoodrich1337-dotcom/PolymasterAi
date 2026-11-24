@@ -16,8 +16,8 @@ from app.core.utils import safe_json_loads, utc_now
 from app.database.session import AsyncSessionLocal
 from app.models.signal import Signal
 from app.services.trading_cycle import _recent_signal_exists, upsert_markets
-from app.weather.forecast import fetch_member_maxima
-from app.weather.model import AIRPORTS, CITY_SLUGS, SIGMA, bin_probability, event_slug, extract_icao, parse_bin, parse_slug
+from app.weather.forecast import fetch_member_maxima, geocode
+from app.weather.model import AIRPORTS, CITY_SLUGS, SIGMA, bin_probability, city_query, event_slug, extract_icao, parse_bin, parse_slug, station_from_text
 
 logger = get_logger(__name__)
 STRATEGY = "weather_ensemble"
@@ -70,6 +70,7 @@ async def run_weather_scan() -> dict[str, Any]:
     settings = get_settings()
     stats: Counter = Counter()
     unknown: set[str] = set()
+    approx_cities: set[str] = set()
     items: list[dict[str, Any]] = []
     market_rows: list[dict[str, Any]] = []
     models_used: set[str] = set()
@@ -82,18 +83,26 @@ async def run_weather_scan() -> dict[str, Any]:
                 continue
             city, day = parsed
             mkts = [m for m in (ev.get("markets") or []) if isinstance(m, dict) and not m.get("closed")]
-            icao = extract_icao(ev.get("description"), *[m.get("description") for m in mkts])
-            if icao not in AIRPORTS:
-                unknown.add(str(icao or city))
-                stats["unknown_station"] += 1
-                continue
+            texts = [ev.get("resolutionSource"), ev.get("description")] + [m.get("resolutionSource") for m in mkts] + [m.get("description") for m in mkts]
+            icao = extract_icao(*texts) or station_from_text(*texts)
+            coords = AIRPORTS.get(icao) if icao else None
+            approx = coords is None
+            if approx:
+                coords = await geocode(http, city_query(city))
+                if coords is None:
+                    unknown.add(city)
+                    stats["unknown_station"] += 1
+                    continue
+                stats["geocoded"] += 1
+                approx_cities.add(city)
             first_bin = next((parse_bin(m.get("groupItemTitle") or m.get("question")) for m in mkts if parse_bin(m.get("groupItemTitle") or m.get("question"))), None)
             if first_bin is None:
                 stats["no_bins"] += 1
                 continue
             unit = first_bin[2]
-            lat, lon = AIRPORTS[icao]
-            maxima, used = await fetch_member_maxima(http, icao, lat, lon, unit)
+            lat, lon = coords
+            place = f"{city}≈" if approx else str(icao)
+            maxima, used = await fetch_member_maxima(http, place, lat, lon, unit)
             models_used.update(used)
             members = maxima.get(day) or []
             if len(members) < 10:
@@ -124,8 +133,8 @@ async def run_weather_scan() -> dict[str, Any]:
                 label = m.get("groupItemTitle") or m.get("question")
                 items.append({
                     "id": str(m.get("id")), "prob": prob, "ask": ask, "edge": edge, "confidence": confidence,
-                    "reason": f"{city} {day} ({icao}), {label}: ансамбль {len(members)} членов, среднее макс. {mean:.1f}°{unit} (разброс {std:.1f}); модель {prob * 100:.0f}% против рынка {ask * 100:.0f}%",
-                    "sources": {"icao": icao, "models": used, "members": len(members), "mean_max": round(mean, 2), "std": round(std, 2), "unit": unit, "bin": label, "day": day},
+                    "reason": f"{city} {day} ({place}), {label}: ансамбль {len(members)} членов, среднее макс. {mean:.1f}°{unit} (разброс {std:.1f}); модель {prob * 100:.0f}% против рынка {ask * 100:.0f}%",
+                    "sources": {"icao": icao, "approx_location": approx, "models": used, "members": len(members), "mean_max": round(mean, 2), "std": round(std, 2), "unit": unit, "bin": label, "day": day},
                 })
                 market_rows.append({
                     "id": str(m.get("id")), "condition_id": m.get("conditionId") or "", "question": m.get("question") or "",
@@ -151,6 +160,6 @@ async def run_weather_scan() -> dict[str, Any]:
             await db.commit()
     LAST_WEATHER.clear()
     LAST_WEATHER.update({"at": utc_now().isoformat(), "events": stats["events"], "markets": stats["markets"], "saved": saved,
-                         "unknown_stations": sorted(unknown), "models": sorted(models_used), "stats": dict(stats)})
-    logger.info("Weather scan: %s saved=%d unknown_stations=%s models=%s", dict(stats), saved, sorted(unknown), sorted(models_used))
+                         "unknown_stations": sorted(unknown), "approx_cities": sorted(approx_cities), "models": sorted(models_used), "stats": dict(stats)})
+    logger.info("Weather scan: %s saved=%d unknown=%s approx_cities=%d models=%s", dict(stats), saved, sorted(unknown), len(approx_cities), sorted(models_used))
     return dict(LAST_WEATHER)

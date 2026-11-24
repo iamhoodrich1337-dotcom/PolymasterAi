@@ -7,9 +7,9 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 ENSEMBLE_URL = "https://ensemble-api.open-meteo.com/v1/ensemble"
-MODELS = ("ecmwf_ifs025", "gfs025", "icon_seamless")
+MODELS = ("ecmwf_ifs025", "gfs025")
 _cache: dict[tuple[str, str], tuple[float, dict[str, list[float]], list[str]]] = {}
-CACHE_SECONDS = 25 * 60
+CACHE_SECONDS = 3 * 3600  # forecast models update only every 6-12 hours; keeps us under the free API limit
 
 
 async def fetch_member_maxima(http: httpx.AsyncClient, icao: str, lat: float, lon: float, unit: str) -> tuple[dict[str, list[float]], list[str]]:
@@ -49,3 +49,23 @@ async def fetch_member_maxima(http: httpx.AsyncClient, icao: str, lat: float, lo
                 result.setdefault(d, []).append(mx)
     _cache[key] = (time.time(), result, used)
     return result, used
+
+
+GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
+_geo_cache: dict[str, tuple[float, float] | None] = {}
+
+
+async def geocode(http: httpx.AsyncClient, name: str) -> tuple[float, float] | None:
+    """City-centre coordinates (approximate) when the exact weather station is not in our table."""
+    if name in _geo_cache:
+        return _geo_cache[name]
+    try:
+        resp = await http.get(GEOCODE_URL, params={"name": name, "count": 1, "language": "en", "format": "json"})
+        resp.raise_for_status()
+        results = (resp.json() or {}).get("results") or []
+        value = (float(results[0]["latitude"]), float(results[0]["longitude"])) if results else None
+    except Exception as exc:
+        logger.warning("Geocoding failed for %s: %s", name, exc)
+        return None
+    _geo_cache[name] = value
+    return value
