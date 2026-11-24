@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     paper_fee_bps: float = 0.0
     scan_interval_seconds: int = 120
     snapshot_interval_seconds: int = 300
+    admin_token: str = ""
+    auto_paper_trading: bool = True
+    weather_provider_url: str = ""
+    weather_api_key: str = ""
+    odds_provider_url: str = ""
+    odds_api_key: str = ""
 
     @field_validator("database_url")
     @classmethod
