@@ -27,6 +27,7 @@ class MarketScanner:
         self.gamma = gamma
         self.clob = clob
         self.settings = get_settings()
+        self.last_stats: dict[str, int] = {}
 
     async def scan(self, limit: int = 100) -> list[dict[str, Any]]:
         raw_markets = await self.gamma.list_markets(active=True, closed=False, limit=limit)
@@ -89,6 +90,7 @@ class MarketScanner:
                 "neg_risk": bool(m.get("negRisk", False)), "end_date": m.get("endDate"),
                 "active": bool(m.get("active", True)), "closed": bool(m.get("closed", False)),
             })
+        self.last_stats = dict(stats)
         logger.info("Scanner stats: %s", dict(stats))
         logger.info("Scanner returned %d tradable markets", len(results))
         return results
