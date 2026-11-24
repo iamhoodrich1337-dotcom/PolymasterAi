@@ -22,6 +22,16 @@ def _is_past(value: Any) -> bool:
     return dt < datetime.now(timezone.utc)
 
 
+def _level_price(level: Any) -> float:
+    """Order book level can be {"price": "0.5", "size": "10"} or [0.5, 10]."""
+    try:
+        if isinstance(level, dict):
+            return parse_float(level.get("price"), 0.0)
+        return parse_float(level[0], 0.0)
+    except (IndexError, KeyError, TypeError):
+        return 0.0
+
+
 class MarketScanner:
     def __init__(self, gamma: GammaClient, clob: ClobClient) -> None:
         self.gamma = gamma
@@ -72,8 +82,13 @@ class MarketScanner:
             if not bids or not asks:
                 stats["empty_book"] += 1
                 continue
-            best_bid = max(parse_float(b[0], 0.0) for b in bids)
-            best_ask = min(parse_float(a[0], 1.0) for a in asks)
+            bid_prices = [p for p in map(_level_price, bids) if p > 0]
+            ask_prices = [p for p in map(_level_price, asks) if p > 0]
+            if not bid_prices or not ask_prices:
+                stats["empty_book"] += 1
+                continue
+            best_bid = max(bid_prices)
+            best_ask = min(ask_prices)
             spread = max(0.0, best_ask - best_bid)
             if spread > self.settings.max_spread:
                 stats["wide_spread"] += 1
