@@ -1,78 +1,164 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>POLYMASTER AI</title>
-  <style>
-    :root { --bg:#0b0f14; --card:#131a22; --text:#e6edf3; --muted:#8b949e; }
-    * { box-sizing: border-box; }
-    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
-    .top { padding:16px; border-bottom:1px solid #21262d; display:flex; justify-content:space-between; align-items:center; }
-    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; padding:16px; }
-    .card { background:var(--card); border:1px solid #21262d; border-radius:10px; padding:16px; }
-    .card h3 { margin:0 0 8px; font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
-    .val { font-size:24px; font-weight:700; }
-    .ok { color:#3fb950; }
-    .bad { color:#f85149; }
-    .muted { color:var(--muted); font-size:12px; }
-    @media (max-width:480px){ .val{font-size:20px;} }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>POLYMASTER AI</title>
+<style>
+:root{--bg:#0b0f14;--card:#131a22;--line:#21262d;--text:#e6edf3;--muted:#8b949e;--ok:#3fb950;--bad:#f85149;--warn:#d29922;--acc:#58a6ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding-bottom:calc(72px + env(safe-area-inset-bottom))}
+.top{padding:calc(12px + env(safe-area-inset-top)) 16px 12px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.chip{font-size:11px;padding:3px 8px;border-radius:8px;background:#1f2a36;color:var(--muted)}
+.chip.ok{color:var(--ok)}.chip.bad{color:var(--bad)}.chip.warn{color:var(--warn)}
+.wrap{padding:12px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+.card h3{margin:0 0 6px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:500}
+.val{font-size:20px;font-weight:600}.sub{font-size:11px;color:var(--muted);margin-top:2px}
+.pos{color:var(--ok)}.neg{color:var(--bad)}.muted{color:var(--muted)}
+.row{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+.row .q{font-size:14px;line-height:1.35;margin-bottom:6px;word-break:break-word}
+.row .meta{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+h2{font-size:14px;font-weight:500;margin:16px 0 8px;color:var(--muted)}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:#0e131a;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;border:0;color:var(--muted);padding:14px 4px;font-size:12px}
+nav button.on{color:var(--text);border-top:2px solid var(--acc);margin-top:-1px}
+button.act{background:#1f6feb;border:0;color:#fff;border-radius:8px;padding:11px 14px;font-size:14px;width:100%;margin-top:8px}
+button.act.red{background:#b62324}button.act.gray{background:#21262d}
+input{width:100%;background:#0b0f14;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:10px;font-size:16px}
+label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+.bar{height:6px;background:#1f2a36;border-radius:3px;margin-top:6px;overflow:hidden}.bar i{display:block;height:100%;background:var(--acc)}
+#login{position:fixed;inset:0;background:var(--bg);z-index:10;display:none;align-items:center;justify-content:center;padding:24px}
+#login .box{width:100%;max-width:360px}
+.err{color:var(--bad);font-size:13px;margin-top:8px;min-height:18px}
+.badge{font-size:11px;padding:2px 7px;border-radius:6px;background:#1f2a36}
+.empty{color:var(--muted);text-align:center;padding:28px 12px;font-size:14px}
+</style>
 </head>
 <body>
-  <div class="top"><strong>POLYMASTER AI</strong><span class="muted">PAPER · LIVE LOCKED</span></div>
-  <div class="grid">
-    <div class="card"><h3>Total Equity</h3><div class="val" id="equity">—</div><div class="muted" id="cash"></div></div>
-    <div class="card"><h3>Realized PnL</h3><div class="val" id="pnl">—</div></div>
-    <div class="card"><h3>Drawdown</h3><div class="val" id="dd">—</div></div>
-    <div class="card"><h3>Open Positions</h3><div class="val" id="positions">—</div></div>
-    <div class="card"><h3>Risk</h3><div class="val ok" id="risk">OK</div></div>
-    <div class="card"><h3>System</h3><div class="val ok" id="health">—</div></div>
-  </div>
-  <script>
-    function getToken() {
-      let t = localStorage.getItem('admin_token');
-      if (!t) {
-        t = prompt('Введите ADMIN_TOKEN');
-        if (t) localStorage.setItem('admin_token', t.trim());
-      }
-      return t ? t.trim() : '';
-    }
-    async function api(path) {
-      const r = await fetch(path, { headers: { 'X-Admin-Token': getToken() } });
-      if (r.status === 401 || r.status === 503) {
-        localStorage.removeItem('admin_token');
-        throw new Error('auth');
-      }
-      return r.json();
-    }
-    async function load() {
-      try {
-        const [p, r, h] = await Promise.all([
-          api('/api/portfolio').catch(e => { if (e.message === 'auth') throw e; return {}; }),
-          api('/api/risk').catch(e => { if (e.message === 'auth') throw e; return {}; }),
-          fetch('/api/health').then(x=>x.json()).catch(()=>({}))
-        ]);
-        if (p.total_equity !== undefined) {
-          document.getElementById('equity').textContent = '$' + Number(p.total_equity).toFixed(2);
-          document.getElementById('cash').textContent = 'Cash $' + Number(p.cash).toFixed(2);
-          document.getElementById('pnl').textContent = '$' + Number(p.realized_pnl).toFixed(2);
-          document.getElementById('dd').textContent = '$' + Number(p.drawdown).toFixed(2);
-          document.getElementById('positions').textContent = p.open_positions;
-        }
-        if (r.kill_switch_engaged !== undefined) {
-          document.getElementById('risk').textContent = r.kill_switch_engaged ? 'BLOCKED' : 'OK';
-          document.getElementById('risk').className = 'val ' + (r.kill_switch_engaged ? 'bad' : 'ok');
-        }
-        document.getElementById('health').textContent = h.status || '—';
-      } catch (e) {
-        if (e.message === 'auth') {
-          document.getElementById('health').textContent = 'Неверный токен — обновите страницу';
-          document.getElementById('health').className = 'val bad';
-        } else { console.error(e); }
-      }
-    }
-    load(); setInterval(load, 15000);
-  </script>
+<div id="login"><div class="box">
+  <h1 style="font-size:20px;margin:0 0 4px">POLYMASTER AI</h1>
+  <div class="muted" style="font-size:13px;margin-bottom:16px">Введите токен доступа (ADMIN_TOKEN)</div>
+  <input id="tok" type="password" autocomplete="off" placeholder="Токен">
+  <button class="act" onclick="doLogin()">Войти</button>
+  <div class="err" id="loginErr"></div>
+</div></div>
+
+<div class="top"><strong>POLYMASTER AI</strong><span class="chip" id="modeChip">PAPER</span></div>
+<div class="wrap">
+  <section id="v-overview"></section>
+  <section id="v-positions" hidden></section>
+  <section id="v-history" hidden></section>
+  <section id="v-signals" hidden></section>
+  <section id="v-risk" hidden></section>
+</div>
+<nav>
+  <button data-v="overview" class="on">Обзор</button>
+  <button data-v="positions">Ставки</button>
+  <button data-v="history">История</button>
+  <button data-v="signals">Сигналы</button>
+  <button data-v="risk">Риск</button>
+</nav>
+
+<script>
+const LABELS={max_position_size:['Макс. ставка на сделку, $',1],max_loss_per_trade:['Макс. убыток на сделку, $',1],max_market_exposure:['Макс. в одном рынке, $',1],max_total_exposure:['Макс. в рынке всего, $',1],max_correlated_exposure:['Макс. в связанных рынках, $',1],daily_stop_loss:['Стоп за день, $',1],weekly_stop_loss:['Стоп за неделю, $',1],max_drawdown:['Макс. просадка, $',1],exit_take_profit_pct:['Фиксировать прибыль при росте, %',100],exit_stop_loss_pct:['Закрывать при падении, %',100]};
+let current='overview',timer=null;
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function money(n){n=Number(n||0);return (n<0?'-':'')+'$'+Math.abs(n).toFixed(2)}
+function cls(n){return n>0?'pos':(n<0?'neg':'')}
+function when(s){try{return new Date(s).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}catch(e){return ''}}
+function token(){return localStorage.getItem('admin_token')||''}
+function showLogin(msg){document.getElementById('login').style.display='flex';document.getElementById('loginErr').textContent=msg||''}
+function doLogin(){const t=document.getElementById('tok').value.trim();if(!t){showLogin('Введите токен');return}localStorage.setItem('admin_token',t);document.getElementById('login').style.display='none';render()}
+async function api(path,opt){
+  const o=opt||{};o.headers=Object.assign({'X-Admin-Token':token(),'Content-Type':'application/json'},o.headers||{});
+  const r=await fetch('/api/dash'+path,o);
+  if(r.status===401||r.status===503){localStorage.removeItem('admin_token');showLogin(r.status===503?'На сервере не задан ADMIN_TOKEN':'Неверный токен');throw new Error('auth')}
+  if(!r.ok){let d='';try{d=(await r.json()).detail}catch(e){}throw new Error(d||('Ошибка '+r.status))}
+  return r.json();
+}
+function spark(points){
+  if(!points||points.length<2)return '<div class="sub">График появится после нескольких циклов бота</div>';
+  const v=points.map(p=>p.equity),mn=Math.min(...v),mx=Math.max(...v),rg=(mx-mn)||1,w=320,h=80;
+  const d=v.map((y,i)=>(i/(v.length-1)*w).toFixed(1)+','+(h-4-((y-mn)/rg)*(h-8)).toFixed(1)).join(' ');
+  return '<svg viewBox="0 0 '+w+' '+h+'" width="100%" height="80" preserveAspectRatio="none"><polyline fill="none" stroke="#58a6ff" stroke-width="2" points="'+d+'"/></svg><div class="sub">От '+money(mn)+' до '+money(mx)+'</div>';
+}
+function bar(used,limit){const p=limit>0?Math.min(100,Math.max(0,used/limit*100)):0;return '<div class="bar"><i style="width:'+p.toFixed(0)+'%"></i></div>'}
+async function vOverview(){
+  const [o,eq]=await Promise.all([api('/overview'),api('/equity')]);
+  const k=o.kill||{},s=o.stats||{},lc=o.last_cycle||{},st=s.by_strategy||{};
+  document.getElementById('modeChip').textContent=o.mode+' · LIVE '+o.live;
+  let strat=Object.keys(st).map(n=>'<div class="row"><div class="meta"><span>'+esc(n)+'</span><span>'+st[n].trades+' сделок · '+Math.round(st[n].wins/st[n].trades*100)+'% побед</span><span class="'+cls(st[n].pnl)+'">'+money(st[n].pnl)+'</span></div></div>').join('');
+  return '<div class="grid">'
+  +'<div class="card"><h3>Капитал</h3><div class="val">'+money(o.total_equity)+'</div><div class="sub">Старт '+money(o.initial_capital)+'</div></div>'
+  +'<div class="card"><h3>Свободно</h3><div class="val">'+money(o.cash)+'</div></div>'
+  +'<div class="card"><h3>Прибыль закрытых</h3><div class="val '+cls(o.realized_pnl)+'">'+money(o.realized_pnl)+'</div></div>'
+  +'<div class="card"><h3>Плавающая</h3><div class="val '+cls(o.unrealized_pnl)+'">'+money(o.unrealized_pnl)+'</div></div>'
+  +'<div class="card"><h3>Просадка</h3><div class="val">'+money(o.drawdown)+'</div><div class="sub">Лимит '+money(o.limits.max_drawdown)+'</div></div>'
+  +'<div class="card"><h3>Винрейт</h3><div class="val">'+(s.closed_trades?s.win_rate+'%':'—')+'</div><div class="sub">Закрыто сделок: '+(s.closed_trades||0)+'</div></div>'
+  +'<div class="card"><h3>В ставках</h3><div class="val">'+money(o.exposure)+'</div><div class="sub">Лимит '+money(o.limits.exposure)+' · позиций '+o.open_positions+'</div>'+bar(o.exposure,o.limits.exposure)+'</div>'
+  +'<div class="card"><h3>Риск</h3><div class="val '+(k.engaged?'neg':'pos')+'">'+(k.engaged?'СТОП':'OK')+'</div><div class="sub">День '+money(o.daily_pnl)+' / '+money(-o.limits.daily_stop)+'</div></div>'
+  +'</div>'
+  +'<h2>Капитал по времени</h2><div class="card">'+spark(eq)+'</div>'
+  +'<h2>По стратегиям</h2>'+(strat||'<div class="empty">Закрытых сделок пока нет</div>')
+  +'<div class="sub" style="margin-top:12px">Последний цикл: '+(lc.at?when(lc.at)+' · рынков '+lc.markets+', сигналов '+lc.signals+', ставок '+lc.orders+', закрыто '+lc.closed:'ещё не завершён')+'</div>';
+}
+async function vPositions(){
+  const p=await api('/positions');
+  if(!p.length)return '<div class="empty">Открытых ставок нет.<br>Бот ставит только когда находит сигнал, прошедший проверку риска.</div>';
+  return p.map(x=>'<div class="row"><div class="q">'+esc(x.question)+'</div><div class="meta"><span>Ставка на: <b style="color:var(--text)">'+esc(x.outcome)+'</b></span><span>'+esc(x.strategy)+'</span></div>'
+  +'<div class="meta" style="margin-top:6px"><span>Вложено '+money(x.cost)+'</span><span>Вход '+x.avg_price+' → сейчас '+x.current_price+'</span><span class="'+cls(x.pnl)+'">'+money(x.pnl)+' ('+x.pnl_pct+'%)</span></div></div>').join('');
+}
+async function vHistory(){
+  const t=await api('/trades');
+  if(!t.length)return '<div class="empty">Сделок пока нет</div>';
+  return t.map(x=>'<div class="row"><div class="q">'+esc(x.question)+'</div><div class="meta"><span><span class="badge">'+(x.side==='BUY'?'ПОКУПКА':'ПРОДАЖА')+'</span> '+esc(x.strategy)+'</span><span>'+x.size+' × '+x.price+' = '+money(x.usd)+'</span>'
+  +(x.side==='SELL'?'<span class="'+cls(x.pnl)+'">'+money(x.pnl)+'</span>':'<span>'+when(x.at)+'</span>')+'</div>'+(x.side==='SELL'?'<div class="sub">'+when(x.at)+'</div>':'')+'</div>').join('');
+}
+async function vSignals(){
+  const s=await api('/signals');
+  if(!s.length)return '<div class="empty">Сигналов пока нет.<br>Они появятся, когда бот увидит рынки.</div>';
+  return s.map(x=>'<div class="row"><div class="q">'+esc(x.question)+'</div><div class="meta"><span>'+esc(x.strategy)+'</span><span>рынок '+x.market_probability+' → оценка '+x.estimated_probability+'</span><span>преимущество '+x.edge+'</span></div>'
+  +'<div class="sub" style="margin-top:6px">'+(x.accepted?'<span class="pos">Ставка сделана</span>':'Пропущено: '+esc(x.rejection_reason||'—'))+' · '+when(x.at)+'</div></div>').join('');
+}
+async function vRisk(){
+  const r=await api('/risk'),u=r.usage,k=r.kill;
+  let f=Object.keys(LABELS).map(key=>{const sc=LABELS[key][1],v=(r.values[key]*sc),d=(r.defaults[key]*sc);
+    return '<label>'+LABELS[key][0]+(r.overridden.includes(key)?' <span class="badge">изменено</span>':'')+'</label><input data-k="'+key+'" type="number" step="any" inputmode="decimal" value="'+Number(v.toFixed(2))+'"><div class="sub">По умолчанию: '+Number(d.toFixed(2))+'</div>'}).join('');
+  return '<div class="card"><h3>Аварийный стоп</h3><div class="val '+(k.engaged?'neg':'pos')+'">'+(k.engaged?'Торговля остановлена':'Торговля разрешена')+'</div>'+(k.engaged&&k.reason?'<div class="sub">'+esc(k.reason)+'</div>':'')
+  +(k.engaged?'<button class="act gray" onclick="kill(false)">Возобновить</button>':'<button class="act red" onclick="kill(true)">Остановить торговлю</button>')+'</div>'
+  +'<h2>Использование</h2><div class="card"><div class="sub">В ставках: '+money(u.exposure)+' из '+money(r.values.max_total_exposure)+'</div>'+bar(u.exposure,r.values.max_total_exposure)
+  +'<div class="sub" style="margin-top:8px">Сегодня: '+money(u.daily_pnl)+' · Неделя: '+money(u.weekly_pnl)+' · Всего: '+money(u.total_pnl)+'</div></div>'
+  +'<h2>Лимиты</h2><div class="card">'+f+'<button class="act" onclick="saveRisk()">Сохранить лимиты</button><button class="act gray" onclick="resetRisk()">Вернуть по умолчанию</button><div class="err" id="riskMsg"></div></div>'
+  +'<div class="sub" style="margin:10px 0">Настоящие деньги не подключены: бот работает только в режиме бумажной торговли.</div>';
+}
+async function kill(on){
+  if(!confirm(on?'Остановить новые ставки?':'Разрешить новые ставки?'))return;
+  try{await api('/risk/kill',{method:'POST',body:JSON.stringify({engaged:on,reason:'остановлено из дашборда'})});render()}catch(e){if(e.message!=='auth')alert(e.message)}
+}
+async function saveRisk(){
+  const vals={};document.querySelectorAll('#v-risk input[data-k]').forEach(i=>{const k=i.dataset.k;vals[k]=Number(i.value)/LABELS[k][1]});
+  const m=document.getElementById('riskMsg');
+  try{await api('/risk',{method:'PUT',body:JSON.stringify({values:vals})});m.style.color='var(--ok)';m.textContent='Сохранено';setTimeout(render,700)}catch(e){if(e.message!=='auth'){m.style.color='var(--bad)';m.textContent=e.message}}
+}
+async function resetRisk(){
+  if(!confirm('Вернуть все лимиты к значениям по умолчанию?'))return;
+  try{await api('/risk/reset',{method:'POST'});render()}catch(e){if(e.message!=='auth')alert(e.message)}
+}
+const VIEWS={overview:vOverview,positions:vPositions,history:vHistory,signals:vSignals,risk:vRisk};
+async function render(){
+  if(!token()){showLogin('');return}
+  const el=document.getElementById('v-'+current);
+  if(current==='risk'&&el.querySelector('input:focus'))return;
+  try{el.innerHTML=await VIEWS[current]()}catch(e){if(e.message!=='auth')el.innerHTML='<div class="empty">Не удалось загрузить: '+esc(e.message)+'</div>'}
+}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  current=b.dataset.v;document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));
+  Object.keys(VIEWS).forEach(v=>document.getElementById('v-'+v).hidden=(v!==current));render();
+});
+document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
+render();timer=setInterval(render,20000);
+</script>
 </body>
 </html>
