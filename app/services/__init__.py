@@ -1,1 +1,0 @@
-# Weather scout package
