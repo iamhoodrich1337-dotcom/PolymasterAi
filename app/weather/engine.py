@@ -74,6 +74,7 @@ async def run_weather_scan() -> dict[str, Any]:
     items: list[dict[str, Any]] = []
     market_rows: list[dict[str, Any]] = []
     models_used: set[str] = set()
+    debug: dict[str, Any] = {}
     async with httpx.AsyncClient(timeout=20.0, headers={"User-Agent": "polymaster-weather/1.0"}) as http:
         events = await discover_events(http, settings.polymarket_gamma_url, stats)
         stats["events"] = len(events)
@@ -118,6 +119,9 @@ async def run_weather_scan() -> dict[str, Any]:
                     stats["market_skipped"] += 1
                     continue
                 stats["markets"] += 1
+                if not debug:
+                    debug.update({"bestAsk": m.get("bestAsk"), "bestBid": m.get("bestBid"), "outcomePrices": str(m.get("outcomePrices"))[:40],
+                                  "has_conditionId": bool(m.get("conditionId")), "title": str(m.get("groupItemTitle"))[:30]})
                 prices = safe_json_loads(m.get("outcomePrices"), [])
                 ask = _num(m.get("bestAsk")) or (_num(prices[0]) if prices else None)
                 bid = _num(m.get("bestBid")) or ask
@@ -126,6 +130,7 @@ async def run_weather_scan() -> dict[str, Any]:
                     continue
                 prob = bin_probability(members, b[0], b[1], SIGMA[unit])
                 if prob < MIN_RECORD_PROB and ask < 0.05:
+                    stats["low_prob_skipped"] += 1
                     continue
                 spread = max(0.0, ask - (bid or ask))
                 edge = prob - ask - spread / 2.0 - settings.paper_slippage_bps / 10_000.0
@@ -137,7 +142,7 @@ async def run_weather_scan() -> dict[str, Any]:
                     "sources": {"icao": icao, "approx_location": approx, "models": used, "members": len(members), "mean_max": round(mean, 2), "std": round(std, 2), "unit": unit, "bin": label, "day": day},
                 })
                 market_rows.append({
-                    "id": str(m.get("id")), "condition_id": m.get("conditionId") or "", "question": m.get("question") or "",
+                    "id": str(m.get("id")), "condition_id": m.get("conditionId") or f"weather-{m.get('id')}", "question": m.get("question") or "",
                     "slug": m.get("slug"), "category": "weather", "outcomes": safe_json_loads(m.get("outcomes"), []),
                     "clob_token_ids": tokens, "end_date": m.get("endDate") or ev.get("endDate"), "active": True, "closed": False,
                     "neg_risk": bool(m.get("negRisk", False)), "liquidity": _num(m.get("liquidityNum")) or _num(m.get("liquidity")) or 0.0,
@@ -149,7 +154,11 @@ async def run_weather_scan() -> dict[str, Any]:
             ok_ids = await upsert_markets(db, market_rows)
             since = utc_now() - timedelta(minutes=DEDUPE_MINUTES)
             for it in items:
-                if it["id"] not in ok_ids or await _recent_signal_exists(db, STRATEGY, it["id"], since):
+                if it["id"] not in ok_ids:
+                    stats["not_saved_market"] += 1
+                    continue
+                if await _recent_signal_exists(db, STRATEGY, it["id"], since):
+                    stats["duplicate_recent"] += 1
                     continue
                 db.add(Signal(
                     strategy=STRATEGY, market_id=it["id"], outcome="Yes", market_probability=it["ask"], estimated_probability=it["prob"],
@@ -160,6 +169,6 @@ async def run_weather_scan() -> dict[str, Any]:
             await db.commit()
     LAST_WEATHER.clear()
     LAST_WEATHER.update({"at": utc_now().isoformat(), "events": stats["events"], "markets": stats["markets"], "saved": saved,
-                         "unknown_stations": sorted(unknown), "approx_cities": sorted(approx_cities), "models": sorted(models_used), "stats": dict(stats)})
+                         "unknown_stations": sorted(unknown), "approx_cities": sorted(approx_cities), "items": len(items), "debug": debug, "models": sorted(models_used), "stats": dict(stats)})
     logger.info("Weather scan: %s saved=%d unknown=%s approx_cities=%d models=%s", dict(stats), saved, sorted(unknown), len(approx_cities), sorted(models_used))
     return dict(LAST_WEATHER)
