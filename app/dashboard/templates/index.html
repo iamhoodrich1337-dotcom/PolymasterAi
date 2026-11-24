@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>POLYMASTER AI</title>
+  <style>
+    :root { --bg:#0b0f14; --card:#131a22; --text:#e6edf3; --muted:#8b949e; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
+    .top { padding:16px; border-bottom:1px solid #21262d; display:flex; justify-content:space-between; align-items:center; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; padding:16px; }
+    .card { background:var(--card); border:1px solid #21262d; border-radius:10px; padding:16px; }
+    .card h3 { margin:0 0 8px; font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+    .val { font-size:24px; font-weight:700; }
+    .ok { color:#3fb950; }
+    .bad { color:#f85149; }
+    .muted { color:var(--muted); font-size:12px; }
+    @media (max-width:480px){ .val{font-size:20px;} }
+  </style>
+</head>
+<body>
+  <div class="top"><strong>POLYMASTER AI</strong><span class="muted">PAPER · LIVE LOCKED</span></div>
+  <div class="grid">
+    <div class="card"><h3>Total Equity</h3><div class="val" id="equity">—</div><div class="muted" id="cash"></div></div>
+    <div class="card"><h3>Realized PnL</h3><div class="val" id="pnl">—</div></div>
+    <div class="card"><h3>Drawdown</h3><div class="val" id="dd">—</div></div>
+    <div class="card"><h3>Open Positions</h3><div class="val" id="positions">—</div></div>
+    <div class="card"><h3>Risk</h3><div class="val ok" id="risk">OK</div></div>
+    <div class="card"><h3>System</h3><div class="val ok" id="health">—</div></div>
+  </div>
+  <script>
+    async function load() {
+      try {
+        const [p, r, h] = await Promise.all([
+          fetch('/api/portfolio').then(x=>x.json()).catch(()=>({})),
+          fetch('/api/risk').then(x=>x.json()).catch(()=>({})),
+          fetch('/api/health').then(x=>x.json()).catch(()=>({}))
+        ]);
+        if (p.total_equity !== undefined) {
+          document.getElementById('equity').textContent = '$' + Number(p.total_equity).toFixed(2);
+          document.getElementById('cash').textContent = 'Cash $' + Number(p.cash).toFixed(2);
+          document.getElementById('pnl').textContent = '$' + Number(p.realized_pnl).toFixed(2);
+          document.getElementById('dd').textContent = '$' + Number(p.drawdown).toFixed(2);
+          document.getElementById('positions').textContent = p.open_positions;
+        }
+        if (r.kill_switch_engaged !== undefined) {
+          document.getElementById('risk').textContent = r.kill_switch_engaged ? 'BLOCKED' : 'OK';
+          document.getElementById('risk').className = 'val ' + (r.kill_switch_engaged ? 'bad' : 'ok');
+        }
+        document.getElementById('health').textContent = h.status || '—';
+      } catch (e) { console.error(e); }
+    }
+    load(); setInterval(load, 15000);
+  </script>
+</body>
+</html>
