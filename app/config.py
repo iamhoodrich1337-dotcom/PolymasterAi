@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     scan_interval_seconds: int = 120
     snapshot_interval_seconds: int = 300
     admin_token: str = ""
+    exit_take_profit_pct: float = 0.20
+    exit_stop_loss_pct: float = 0.40
+    kelly_fraction: float = 0.5
     auto_paper_trading: bool = True
     weather_provider_url: str = ""
     weather_api_key: str = ""
