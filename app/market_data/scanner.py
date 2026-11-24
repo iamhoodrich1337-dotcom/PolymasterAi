@@ -1,3 +1,5 @@
+from collections import Counter
+from datetime import datetime, timezone
 from typing import Any
 from app.config import get_settings
 from app.core.logging import get_logger
@@ -7,6 +9,19 @@ from app.market_data.gamma_client import GammaClient
 
 logger = get_logger(__name__)
 
+
+def _is_past(value: Any) -> bool:
+    if not value:
+        return False
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt < datetime.now(timezone.utc)
+
+
 class MarketScanner:
     def __init__(self, gamma: GammaClient, clob: ClobClient) -> None:
         self.gamma = gamma
@@ -15,6 +30,11 @@ class MarketScanner:
 
     async def scan(self, limit: int = 100) -> list[dict[str, Any]]:
         raw_markets = await self.gamma.list_markets(active=True, closed=False, limit=limit)
+        stats: Counter = Counter()
+        stats["raw"] = len(raw_markets)
+        if raw_markets and isinstance(raw_markets[0], dict):
+            first = raw_markets[0]
+            logger.info("Scanner sample: top market volume24hr=%s liquidity=%s question=%s", first.get("volume24hr"), first.get("liquidity"), str(first.get("question"))[:60])
         results: list[dict[str, Any]] = []
         for m in raw_markets:
             if not isinstance(m, dict):
@@ -22,29 +42,42 @@ class MarketScanner:
             market_id = str(m.get("id", ""))
             condition_id = m.get("conditionId") or m.get("condition_id") or ""
             if not market_id or not condition_id:
+                stats["no_id"] += 1
                 continue
-            liquidity = parse_float(m.get("liquidity"), 0.0)
+            if m.get("enableOrderBook") is False or m.get("acceptingOrders") is False:
+                stats["no_orderbook"] += 1
+                continue
+            if _is_past(m.get("endDate")):
+                stats["ended"] += 1
+                continue
+            liq_raw = m.get("liquidityNum") if m.get("liquidityNum") is not None else m.get("liquidity")
+            liquidity = parse_float(liq_raw, 0.0)
             if liquidity < self.settings.min_liquidity:
+                stats["low_liquidity"] += 1
                 continue
             token_ids = safe_json_loads(m.get("clobTokenIds") or m.get("clob_token_ids"), [])
             outcomes = safe_json_loads(m.get("outcomes"), [])
             if not isinstance(token_ids, list) or len(token_ids) < 2:
+                stats["no_tokens"] += 1
                 continue
-            best_bid = 0.0
-            best_ask = 0.0
-            spread = 1.0
             try:
                 book = await self.clob.get_order_book(token_ids[0])
-                bids = book.get("bids") or []
-                asks = book.get("asks") or []
-                if bids and asks:
-                    best_bid = max(parse_float(b[0], 0.0) for b in bids if isinstance(b, (list, tuple)))
-                    best_ask = min(parse_float(a[0], 1.0) for a in asks if isinstance(a, (list, tuple)))
-                    spread = max(0.0, best_ask - best_bid)
             except Exception as exc:
                 logger.debug("Order book unavailable for %s: %s", market_id, exc)
-            if spread > self.settings.max_spread:
+                stats["book_error"] += 1
                 continue
+            bids = book.get("bids") or []
+            asks = book.get("asks") or []
+            if not bids or not asks:
+                stats["empty_book"] += 1
+                continue
+            best_bid = max(parse_float(b[0], 0.0) for b in bids)
+            best_ask = min(parse_float(a[0], 1.0) for a in asks)
+            spread = max(0.0, best_ask - best_bid)
+            if spread > self.settings.max_spread:
+                stats["wide_spread"] += 1
+                continue
+            stats["ok"] += 1
             results.append({
                 "id": market_id, "condition_id": condition_id,
                 "question": m.get("question") or m.get("title") or "",
@@ -56,5 +89,6 @@ class MarketScanner:
                 "neg_risk": bool(m.get("negRisk", False)), "end_date": m.get("endDate"),
                 "active": bool(m.get("active", True)), "closed": bool(m.get("closed", False)),
             })
+        logger.info("Scanner stats: %s", dict(stats))
         logger.info("Scanner returned %d tradable markets", len(results))
         return results
