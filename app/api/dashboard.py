@@ -17,6 +17,7 @@ from app.risk.overrides import (
 )
 from app.services import trading_cycle
 from app.services.portfolio_ops import trade_stats, valuate
+from app.weather import engine as weather_engine
 
 router = APIRouter(prefix="/dash", tags=["dashboard"])
 
@@ -44,7 +45,7 @@ async def overview(db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
         "unrealized_pnl": v["unrealized_pnl"], "drawdown": v["drawdown"], "exposure": v["exposure"],
         "open_positions": v["open_positions"], "daily_pnl": round(daily, 2),
         "limits": {"max_drawdown": vals["max_drawdown"], "exposure": vals["max_total_exposure"], "daily_stop": vals["daily_stop_loss"]},
-        "kill": await get_kill(db), "stats": await trade_stats(db), "last_cycle": trading_cycle.LAST_CYCLE or None,
+        "kill": await get_kill(db), "stats": await trade_stats(db), "last_cycle": trading_cycle.LAST_CYCLE or None, "weather": weather_engine.LAST_WEATHER or None,
     }
 
 
