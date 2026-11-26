@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException
@@ -18,6 +19,7 @@ from app.risk.overrides import (
 from app.services import trading_cycle
 from app.services.portfolio_ops import trade_stats, valuate
 from app.weather import engine as weather_engine
+from app.weather.accuracy import compute_accuracy
 
 router = APIRouter(prefix="/dash", tags=["dashboard"])
 
@@ -128,3 +130,21 @@ async def risk_kill(payload: dict = Body(...), db: AsyncSession = Depends(get_db
 async def risk_reset(db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
     await save_overrides(db, {})
     return {"reset": True, "fields": list(ALL_FIELDS)}
+
+
+@router.get("/accuracy")
+async def accuracy(db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    rows = (await db.execute(
+        select(Signal).where(Signal.strategy == "weather_ensemble").order_by(Signal.id.asc()).limit(30000)
+    )).scalars().all()
+    items: list[dict[str, Any]] = []
+    for s in rows:
+        try:
+            src = json.loads(s.sources_json or "{}")
+        except ValueError:
+            continue
+        items.append({
+            "market_id": s.market_id, "city": src.get("city") or (s.reason or "").split(" ", 1)[0], "day": src.get("day") or "",
+            "p": float(s.estimated_probability), "ask": float(s.market_probability), "edge": float(s.edge), "src": src,
+        })
+    return compute_accuracy(items)
