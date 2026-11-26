@@ -5,6 +5,7 @@ from app.config import get_settings
 from app.core.logging import get_logger
 from app.services.trading_cycle import run_cycle
 from app.weather.engine import run_weather_scan
+from app.weather.settle import settle_weather
 
 logger = get_logger(__name__)
 scheduler = AsyncIOScheduler()
@@ -20,6 +21,10 @@ async def weather_job() -> None:
         await run_weather_scan()
     except Exception:
         logger.exception("Weather scan failed")
+    try:
+        await settle_weather()
+    except Exception:
+        logger.exception("Weather settle failed")
 
 async def start_scheduler() -> None:
     settings = get_settings()
