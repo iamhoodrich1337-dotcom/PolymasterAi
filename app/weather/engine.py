@@ -139,7 +139,7 @@ async def run_weather_scan() -> dict[str, Any]:
                 items.append({
                     "id": str(m.get("id")), "prob": prob, "ask": ask, "edge": edge, "confidence": confidence,
                     "reason": f"{city} {day} ({place}), {label}: ансамбль {len(members)} членов, среднее макс. {mean:.1f}°{unit} (разброс {std:.1f}); модель {prob * 100:.0f}% против рынка {ask * 100:.0f}%",
-                    "sources": {"icao": icao, "approx_location": approx, "models": used, "members": len(members), "mean_max": round(mean, 2), "std": round(std, 2), "unit": unit, "bin": label, "day": day},
+                    "sources": {"city": city, "icao": icao, "approx_location": approx, "models": used, "members": len(members), "mean_max": round(mean, 2), "std": round(std, 2), "unit": unit, "bin": label, "day": day},
                 })
                 market_rows.append({
                     "id": str(m.get("id")), "condition_id": m.get("conditionId") or f"weather-{m.get('id')}", "question": m.get("question") or "",
