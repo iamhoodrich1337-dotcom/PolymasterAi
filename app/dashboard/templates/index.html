@@ -51,6 +51,7 @@ label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
   <section id="v-positions" hidden></section>
   <section id="v-history" hidden></section>
   <section id="v-signals" hidden></section>
+  <section id="v-accuracy" hidden></section>
   <section id="v-risk" hidden></section>
 </div>
 <nav>
@@ -58,6 +59,7 @@ label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
   <button data-v="positions">Ставки</button>
   <button data-v="history">История</button>
   <button data-v="signals">Сигналы</button>
+  <button data-v="accuracy">Точность</button>
   <button data-v="risk">Риск</button>
 </nav>
 
@@ -122,6 +124,22 @@ async function vSignals(){
   return s.map(x=>'<div class="row"><div class="q">'+esc(x.question)+'</div><div class="meta"><span>'+esc(x.strategy)+'</span><span>рынок '+x.market_probability+' → оценка '+x.estimated_probability+'</span><span>преимущество '+x.edge+'</span></div>'
   +'<div class="sub" style="margin-top:6px">'+(x.accepted?'<span class="pos">Ставка сделана</span>':'Пропущено: '+esc(x.rejection_reason||'—'))+' · '+when(x.at)+'</div></div>').join('');
 }
+async function vAccuracy(){
+  const a=await api('/accuracy');
+  const head='<div class="card"><h3>Проверка погодного прогноза</h3><div class="sub">Записано сигналов: '+a.signals_total+' · рынков: '+a.markets_total+' · с известным итогом: <b>'+a.resolved_markets+'</b></div></div>';
+  if(!a.resolved_markets)return head+'<div class="empty">Итогов пока нет.<br>Рынки закрываются каждый день: первые результаты появятся через 1–2 суток после запуска.</div>';
+  const b=a.brier,better=b.model<b.market;
+  let h=head+'<div class="grid" style="margin-top:10px"><div class="card"><h3>Ошибка прогноза</h3><div class="val">'+b.model+'</div><div class="sub">чем меньше, тем лучше</div></div><div class="card"><h3>Ошибка рынка</h3><div class="val">'+b.market+'</div><div class="sub">'+(better?'<span class="pos">прогноз точнее рынка</span>':'<span class="neg">рынок точнее прогноза</span>')+'</div></div></div>';
+  if(a.resolved_markets<100)h+='<div class="sub" style="margin:8px 2px">Данных пока мало (нужно хотя бы 100 рынков). Выводы предварительные.</div>';
+  h+='<h2 style="font-size:15px;margin:18px 2px 8px">Если бы ставили по $1 при преимуществе от…</h2>';
+  h+=a.sim.map(r=>{const f=(g,n)=>g.bets?n+': '+g.bets+' ставок, '+money(g.pnl)+' ('+Math.round(g.roi*100)+'%)':n+': нет ставок';
+    return '<div class="row"><div class="q">От '+Math.round(r.min_edge*100)+'%</div><div class="sub">'+f(r.station,'По станции')+'</div><div class="sub">'+f(r.approx,'Приблизительно')+'</div></div>'}).join('');
+  if(a.buckets.length){h+='<h2 style="font-size:15px;margin:18px 2px 8px">Честен ли прогноз?</h2>';
+    h+=a.buckets.map(x=>'<div class="row"><div class="meta"><span>Прогноз '+x.range+'</span><span>рынков '+x.n+'</span><span>сказал '+Math.round(x.predicted*100)+'% · было '+Math.round(x.actual*100)+'%</span></div></div>').join('')}
+  if(a.bias.length){h+='<h2 style="font-size:15px;margin:18px 2px 8px">Систематическая ошибка по городам</h2>';
+    h+=a.bias.map(x=>'<div class="row"><div class="meta"><span>'+esc(x.city)+'</span><span>дней '+x.days+'</span><span class="'+cls(x.bias)+'">факт − прогноз: '+(x.bias>0?'+':'')+x.bias+'°'+esc(x.unit)+'</span></div></div>').join('')}
+  return h;
+}
 async function vRisk(){
   const r=await api('/risk'),u=r.usage,k=r.kill;
   let f=Object.keys(LABELS).map(key=>{const sc=LABELS[key][1],v=(r.values[key]*sc),d=(r.defaults[key]*sc);
@@ -146,7 +164,7 @@ async function resetRisk(){
   if(!confirm('Вернуть все лимиты к значениям по умолчанию?'))return;
   try{await api('/risk/reset',{method:'POST'});render()}catch(e){if(e.message!=='auth')alert(e.message)}
 }
-const VIEWS={overview:vOverview,positions:vPositions,history:vHistory,signals:vSignals,risk:vRisk};
+const VIEWS={overview:vOverview,positions:vPositions,history:vHistory,signals:vSignals,accuracy:vAccuracy,risk:vRisk};
 async function render(){
   if(!token()){showLogin('');return}
   const el=document.getElementById('v-'+current);
