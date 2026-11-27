@@ -4,6 +4,7 @@ from typing import Any
 from app.config import get_settings
 from app.core.logging import get_logger
 from app.core.utils import parse_float, safe_json_loads
+from app.market_data.book_validation import check_book
 from app.market_data.clob_client import ClobClient
 from app.market_data.gamma_client import GammaClient
 
@@ -77,19 +78,12 @@ class MarketScanner:
                 logger.debug("Order book unavailable for %s: %s", market_id, exc)
                 stats["book_error"] += 1
                 continue
-            bids = book.get("bids") or []
-            asks = book.get("asks") or []
-            if not bids or not asks:
-                stats["empty_book"] += 1
+            chk = check_book(book)
+            if not chk.ok:
+                stats[chk.reason] += 1
                 continue
-            bid_prices = [p for p in map(_level_price, bids) if p > 0]
-            ask_prices = [p for p in map(_level_price, asks) if p > 0]
-            if not bid_prices or not ask_prices:
-                stats["empty_book"] += 1
-                continue
-            best_bid = max(bid_prices)
-            best_ask = min(ask_prices)
-            spread = max(0.0, best_ask - best_bid)
+            best_bid, best_ask = float(chk.best_bid), float(chk.best_ask)
+            spread = best_ask - best_bid
             if spread > self.settings.max_spread:
                 stats["wide_spread"] += 1
                 continue
