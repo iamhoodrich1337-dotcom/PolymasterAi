@@ -134,6 +134,11 @@ async function vAccuracy(){
   h+='<h2 style="font-size:15px;margin:18px 2px 8px">Если бы ставили по $1 при преимуществе от…</h2>';
   h+=a.sim.map(r=>{const f=(g,n)=>g.bets?n+': '+g.bets+' ставок, '+money(g.pnl)+' ('+Math.round(g.roi*100)+'%)':n+': нет ставок';
     return '<div class="row"><div class="q">От '+Math.round(r.min_edge*100)+'%</div><div class="sub">'+f(r.station,'По станции')+'</div><div class="sub">'+f(r.approx,'Приблизительно')+'</div></div>'}).join('');
+  const sp=a.split||{};
+  h+='<h2 style="font-size:15px;margin:18px 2px 8px">Станция против приблизительного места</h2>';
+  h+=['station','approx'].map(k=>{const g=sp[k];const n=k==='station'?'По станции':'Приблизительно';return '<div class="row"><div class="meta"><span>'+n+'</span><span>'+(g?('рынков '+g.n+' · прогноз '+g.model+' / рынок '+g.market):'нет данных')+'</span></div></div>'}).join('');
+  if((a.blend||[]).length){h+='<h2 style="font-size:15px;margin:18px 2px 8px">Что если смешать с рынком?</h2><div class="sub" style="margin:0 2px 8px">0% = только рынок, 100% = только прогноз. Если ни одна смесь не лучше 0%, прогноз ничего не добавляет.</div>';
+    h+=a.blend.map(x=>'<div class="row"><div class="meta"><span>Доля прогноза '+Math.round(x.w*100)+'%</span><span>ошибка '+x.brier+'</span></div></div>').join('')}
   if(a.buckets.length){h+='<h2 style="font-size:15px;margin:18px 2px 8px">Честен ли прогноз?</h2>';
     h+=a.buckets.map(x=>'<div class="row"><div class="meta"><span>Прогноз '+x.range+'</span><span>рынков '+x.n+'</span><span>сказал '+Math.round(x.predicted*100)+'% · было '+Math.round(x.actual*100)+'%</span></div></div>').join('')}
   if(a.bias.length){h+='<h2 style="font-size:15px;margin:18px 2px 8px">Систематическая ошибка по городам</h2>';
