@@ -71,6 +71,7 @@ async def run_weather_scan() -> dict[str, Any]:
     stats: Counter = Counter()
     unknown: set[str] = set()
     approx_cities: set[str] = set()
+    approx_samples: dict[str, Any] = {}
     items: list[dict[str, Any]] = []
     market_rows: list[dict[str, Any]] = []
     models_used: set[str] = set()
@@ -96,6 +97,11 @@ async def run_weather_scan() -> dict[str, Any]:
                     continue
                 stats["geocoded"] += 1
                 approx_cities.add(city)
+                if len(approx_samples) < 5 and city not in approx_samples:
+                    desc = ev.get("description") or ""
+                    i = desc.lower().find("station")
+                    approx_samples[city] = {"icao": icao, "src": str(ev.get("resolutionSource"))[:110],
+                                            "desc": desc[max(0, i - 50):i + 110] if i >= 0 else desc[:120]}
             first_bin = next((parse_bin(m.get("groupItemTitle") or m.get("question")) for m in mkts if parse_bin(m.get("groupItemTitle") or m.get("question"))), None)
             if first_bin is None:
                 stats["no_bins"] += 1
@@ -169,6 +175,6 @@ async def run_weather_scan() -> dict[str, Any]:
             await db.commit()
     LAST_WEATHER.clear()
     LAST_WEATHER.update({"at": utc_now().isoformat(), "events": stats["events"], "markets": stats["markets"], "saved": saved,
-                         "unknown_stations": sorted(unknown), "approx_cities": sorted(approx_cities), "items": len(items), "debug": debug, "models": sorted(models_used), "stats": dict(stats)})
+                         "unknown_stations": sorted(unknown), "approx_cities": sorted(approx_cities), "items": len(items), "debug": {**debug, "approx_samples": approx_samples}, "models": sorted(models_used), "stats": dict(stats)})
     logger.info("Weather scan: %s saved=%d unknown=%s approx_cities=%d models=%s", dict(stats), saved, sorted(unknown), len(approx_cities), sorted(models_used))
     return dict(LAST_WEATHER)

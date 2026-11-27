@@ -36,11 +36,21 @@ def compute_accuracy(items: list[dict[str, Any]]) -> dict[str, Any]:
             res.append({**it, "y": int(y)})
     out: dict[str, Any] = {"signals_total": len(items), "markets_total": len(first), "resolved_markets": len(res)}
     if not res:
-        return {**out, "brier": None, "buckets": [], "sim": [], "bias": []}
+        return {**out, "brier": None, "split": {}, "blend": [], "buckets": [], "sim": [], "bias": []}
     out["brier"] = {
         "model": round(sum((r["p"] - r["y"]) ** 2 for r in res) / len(res), 4),
         "market": round(sum((r["ask"] - r["y"]) ** 2 for r in res) / len(res), 4),
     }
+    def _brier(grp: list[dict[str, Any]]) -> dict[str, Any] | None:
+        if not grp:
+            return None
+        return {"n": len(grp), "model": round(sum((r["p"] - r["y"]) ** 2 for r in grp) / len(grp), 4),
+                "market": round(sum((r["ask"] - r["y"]) ** 2 for r in grp) / len(grp), 4)}
+
+    out["split"] = {"station": _brier([r for r in res if not r["src"].get("approx_location")]),
+                    "approx": _brier([r for r in res if r["src"].get("approx_location")])}
+    out["blend"] = [{"w": w, "brier": round(sum((w * r["p"] + (1 - w) * r["ask"] - r["y"]) ** 2 for r in res) / len(res), 4)}
+                    for w in (0.0, 0.1, 0.25, 0.5, 0.75, 1.0)]
     edges = [(0.0, 0.1), (0.1, 0.3), (0.3, 0.5), (0.5, 0.7), (0.7, 1.01)]
     buckets = []
     for lo, hi in edges:
