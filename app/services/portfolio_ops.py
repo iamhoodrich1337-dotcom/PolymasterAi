@@ -149,11 +149,11 @@ async def manage_positions(db: AsyncSession, clob: ClobClient, gamma: GammaClien
             last_buy = (await db.execute(
                 select(Trade.strategy).where(Trade.position_id == pos.id, Trade.side == "BUY").order_by(desc(Trade.executed_at)).limit(1)
             )).scalar_one_or_none()
-            pos.size = max(0.0, float(pos.size) - sold)
+            pos.size = round(max(0.0, float(pos.size) - sold), 8)
             if pos.size < 1e-9:
                 pos.size = 0.0
-            pos.realized_pnl = float(pos.realized_pnl) + pnl
-            pos.fees_paid = max(0.0, float(pos.fees_paid) - fee_share)
+            pos.realized_pnl = round(float(pos.realized_pnl) + pnl, 8)
+            pos.fees_paid = round(max(0.0, float(pos.fees_paid) - fee_share), 8)
             db.add(Trade(position_id=pos.id, market_id=pos.market_id, token_id=pos.token_id, side="SELL", price=price, size=sold, fee=sell_fee, realized_pnl=round(pnl, 6), strategy=last_buy or "unknown"))
             await db.commit()
             _price_cache.pop(pos.token_id, None)
