@@ -63,16 +63,16 @@ class PaperTradingEngine:
             logger.warning("Simulation failed for %s: %s", token_id, exc)
             await db.commit()
             return None
-        order = PaperOrder(signal_id=signal_id, market_id=market_id, token_id=token_id, outcome=outcome, side="BUY", price=best_ask, size=size_usd / best_ask, filled_size=fill.filled_size, avg_fill_price=fill.avg_price, fee=fill.fee, slippage=fill.slippage, status="PARTIAL" if fill.partial else "FILLED", reason="paper simulation")
+        order = PaperOrder(signal_id=signal_id, market_id=market_id, token_id=token_id, outcome=outcome, side="BUY", price=best_ask, size=round(size_usd / best_ask, 8), filled_size=fill.filled_size, avg_fill_price=fill.avg_price, fee=fill.fee, slippage=fill.slippage, status="PARTIAL" if fill.partial else "FILLED", reason="paper simulation")
         db.add(order)
         await db.flush()
         db.add(PaperFill(order_id=order.id, price=fill.avg_price, size=fill.filled_size, fee=fill.fee))
         position = (await db.execute(select(Position).where(Position.market_id == market_id, Position.token_id == token_id))).scalar_one_or_none()
         if position:
             total_size = position.size + fill.filled_size
-            position.avg_price = ((position.avg_price * position.size) + (fill.avg_price * fill.filled_size)) / total_size
-            position.size = total_size
-            position.fees_paid += fill.fee
+            position.avg_price = round(((position.avg_price * position.size) + (fill.avg_price * fill.filled_size)) / total_size, 8)
+            position.size = round(total_size, 8)
+            position.fees_paid = round(position.fees_paid + fill.fee, 8)
         else:
             position = Position(market_id=market_id, token_id=token_id, outcome=outcome, size=fill.filled_size, avg_price=fill.avg_price, fees_paid=fill.fee)
             db.add(position)
